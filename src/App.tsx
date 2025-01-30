@@ -9,7 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { AlertTriangle, FilePlus, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  FilePlus,
+  Loader,
+  Play,
+  RotateCw,
+  Upload,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 
@@ -24,6 +32,9 @@ function App() {
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const [error, setError] = useState<string | null>(null);
+  const [convertedVideoUrl, setConvertedVideoUrl] = useState<string | null>(
+    null,
+  );
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +79,10 @@ function App() {
   const handleFileSelect = (file: File) => {
     setVideoFile(file);
     setError(null);
+    setLogMessages([]);
+    setConvertedVideoUrl(null);
+    setProgress(0);
+    setLoading(false);
     if (videoRef.current) {
       videoRef.current.src = URL.createObjectURL(file);
     }
@@ -104,11 +119,13 @@ function App() {
       ]);
       const data = await ffmpeg.readFile("output.mp4");
 
+      const blob = new Blob([data], { type: "video/mp4" });
+      const url = URL.createObjectURL(blob);
+
       if (videoRef.current) {
-        videoRef.current.src = URL.createObjectURL(
-          new Blob([data], { type: "video/mp4" }),
-        );
+        videoRef.current.src = url;
       }
+      setConvertedVideoUrl(url);
     } catch (err: any) {
       console.error("Error transcoding:", err);
       setError("Failed to process video. Please try another video.");
@@ -135,6 +152,16 @@ function App() {
     shouldAutoScrollRef.current = isNearBottom;
   };
 
+  const handleDownload = () => {
+    if (!convertedVideoUrl) return;
+    const link = document.createElement("a");
+    link.href = convertedVideoUrl;
+    link.download = "converted_video.mp4";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="dark:bg-gray-800 flex items-center justify-center min-h-screen bg-gray-100">
       <Card className="w-[500px] p-4 dark:bg-gray-700 dark:text-white dark:border-gray-500">
@@ -151,7 +178,17 @@ function App() {
               disabled={loading}
               onClick={load}
             >
-              {loading ? "Loading..." : "Initialize Converter"}
+              {loading ? (
+                <>
+                  <Loader className="animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Initialize Converter
+                </>
+              )}
             </Button>
           ) : (
             <>
@@ -175,7 +212,7 @@ function App() {
                   size="sm"
                   className="mt-2 dark:text-black dark:border-gray-500"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
+                  <Upload className="h-4 w-4" />
                   Select a Video
                 </Button>
               </div>
@@ -193,14 +230,35 @@ function App() {
                 className="w-full aspect-video rounded-md mt-4 dark:bg-gray-900"
               />
 
-              <Button
-                disabled={loading || !videoFile}
-                onClick={transcode}
-                className="mt-2 dark:text-white dark:bg-blue-500 hover:dark:bg-blue-600"
-              >
-                {loading ? "Processing..." : "Convert to Light Mode"}
-              </Button>
-
+              <div className="flex flex-col md:flex-row md:items-center gap-2 mt-2">
+                <Button
+                  disabled={loading || !videoFile}
+                  onClick={transcode}
+                  className="flex-1 dark:text-white"
+                >
+                  {loading ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCw className="h-4 w-4" />
+                      Convert to Light Mode
+                    </>
+                  )}
+                </Button>
+                {convertedVideoUrl && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDownload}
+                    className="dark:text-black"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
+                )}
+              </div>
               {loading && (
                 <Progress value={progress} className="mt-2 dark:bg-white" />
               )}
@@ -208,7 +266,7 @@ function App() {
               <Accordion type="single" collapsible className="mt-2">
                 <AccordionItem value="log">
                   <AccordionTrigger className="cursor-pointer dark:text-white">
-                    Show Details
+                    Show Logs
                   </AccordionTrigger>
                   <AccordionContent>
                     <div

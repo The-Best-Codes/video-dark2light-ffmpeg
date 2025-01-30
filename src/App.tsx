@@ -1,42 +1,42 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { useRef, useState } from "react";
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
+import { useEffect, useRef, useState } from "react";
 
 function App() {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0); // Track progress
+  const [progress, setProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(15);
   const ffmpegRef = useRef(new FFmpeg());
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const messageRef = useRef<HTMLParagraphElement | null>(null);
+  const logMessagesRef = useRef<string[]>([]);
+  const [logMessages, setLogMessages] = useState<string[]>([]);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
 
   const load = async () => {
     setLoading(true);
     const baseURL = "";
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("log", ({ message }) => {
-      if (messageRef.current) messageRef.current.innerHTML = message;
-      // Simple progress tracking (may not be accurate for all ffmpeg commands)
-      if (message.startsWith("progress=")) {
-        const parts = message.split("=");
-        const timePart = parts[parts.length - 1].trim(); // Get the last part which contains the time
-        const timeRegex = /(\d{2}):(\d{2}):(\d{2})/;
-        const timeMatch = timePart.match(timeRegex);
+      logMessagesRef.current = [...logMessagesRef.current, message];
+      setLogMessages([...logMessagesRef.current]);
 
-        if (timeMatch) {
-          const hours = parseInt(timeMatch[1], 10);
-          const minutes = parseInt(timeMatch[2], 10);
-          const seconds = parseInt(timeMatch[3], 10);
-          const currentTime = hours * 3600 + minutes * 60 + seconds;
-          // Assume a 15 second video
-          const totalTime = 15;
-          const calculatedProgress = (currentTime / totalTime) * 100;
-          setProgress(Math.min(100, calculatedProgress));
-        }
+      // Parse time from log message, e.g., time=00:00:01.23
+      const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+      if (timeMatch) {
+        const hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        const seconds = parseFloat(timeMatch[3]);
+        const currentTime = hours * 3600 + minutes * 60 + seconds;
+        const calculatedProgress = (currentTime / videoDuration) * 100;
+        setProgress(Math.min(100, calculatedProgress));
       }
     });
     try {
@@ -83,6 +83,33 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (viewportRef.current) {
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } =
+          viewportRef.current as HTMLDivElement;
+        const bottom = scrollHeight - clientHeight;
+        setIsNearBottom(Math.abs(bottom - scrollTop) <= 10);
+      };
+
+      viewportRef.current.addEventListener("scroll", handleScroll);
+      handleScroll();
+      return () => {
+        if (viewportRef.current) {
+          viewportRef.current.removeEventListener("scroll", handleScroll);
+        }
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewportRef.current && isNearBottom) {
+      (viewportRef.current as HTMLDivElement).scrollTop = (
+        viewportRef.current as HTMLDivElement
+      ).scrollHeight;
+    }
+  }, [logMessages, isNearBottom]);
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <Card className="w-[500px] p-4">
@@ -96,6 +123,18 @@ function App() {
             </Button>
           ) : (
             <>
+              <div className="flex items-center space-x-2 mb-2">
+                <label htmlFor="duration" className="text-sm">
+                  Video Duration (seconds):
+                </label>
+                <Input
+                  id="duration"
+                  type="number"
+                  value={videoDuration}
+                  onChange={(e) => setVideoDuration(Number(e.target.value))}
+                  className="w-20 text-sm"
+                />
+              </div>
               <video
                 ref={videoRef}
                 controls
@@ -107,7 +146,18 @@ function App() {
               </Button>
               {loading ? <Progress value={progress} className="mt-2" /> : null}
               <ScrollArea className="h-20 mt-2 rounded-md border border-input">
-                <p ref={messageRef} className="p-2 text-sm"></p>
+                <ScrollAreaPrimitive.Viewport
+                  ref={viewportRef}
+                  className="h-full w-full rounded-[inherit]"
+                >
+                  {logMessages.map((message, index) => (
+                    <p key={index} className="p-2 text-sm">
+                      {message}
+                    </p>
+                  ))}
+                </ScrollAreaPrimitive.Viewport>
+                <ScrollBar />
+                <ScrollAreaPrimitive.Corner />
               </ScrollArea>
             </>
           )}

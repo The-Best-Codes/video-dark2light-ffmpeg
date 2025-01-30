@@ -12,33 +12,30 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoDuration, setVideoDuration] = useState(0);
   const ffmpegRef = useRef(new FFmpeg());
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const logMessagesRef = useRef<string[]>([]);
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   const load = async () => {
     setLoading(true);
     const baseURL = "";
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("log", ({ message }) => {
-      logMessagesRef.current = [...logMessagesRef.current, message];
-      setLogMessages([...logMessagesRef.current]);
+      setLogMessages((prev) => [...prev, message]);
 
-      // Parse time from log message, e.g., time=00:00:01.23
+      // Parse progress from FFmpeg output
       const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
-      if (timeMatch) {
-        const hours = parseInt(timeMatch[1], 10);
-        const minutes = parseInt(timeMatch[2], 10);
-        const seconds = parseFloat(timeMatch[3]);
-        const currentTime = hours * 3600 + minutes * 60 + seconds;
-        const calculatedProgress = (currentTime / videoDuration) * 100;
-        setProgress(Math.min(100, calculatedProgress));
+      if (timeMatch && videoRef.current?.duration) {
+        const [, hours, minutes, seconds] = timeMatch;
+        const currentTime =
+          parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+        const progress = (currentTime / videoRef.current.duration) * 100;
+        setProgress(Math.min(100, progress));
       }
     });
+
     try {
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}ffmpeg-core.js`, "text/javascript"),
@@ -52,90 +49,72 @@ function App() {
         ),
       });
       setLoaded(true);
-      setLoading(false);
     } catch (error) {
       console.error("Error loading ffmpeg:", error);
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleFileDrop = (acceptedFiles: File[]) => {
-    if (acceptedFiles && acceptedFiles[0]) {
-      setVideoFile(acceptedFiles[0]);
-      if (videoRef.current) {
-        videoRef.current.src = URL.createObjectURL(acceptedFiles[0]);
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            setVideoDuration(videoRef.current.duration);
-          }
-        };
-      }
+  const handleFileSelect = (file: File) => {
+    setVideoFile(file);
+    if (videoRef.current) {
+      videoRef.current.src = URL.createObjectURL(file);
     }
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: handleFileDrop,
+    onDrop: (files) => files[0] && handleFileSelect(files[0]),
     accept: {
       "video/*": [".mp4", ".mov", ".avi"],
     },
     multiple: false,
   });
 
-  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setVideoFile(e.target.files[0]);
-      if (videoRef.current) {
-        videoRef.current.src = URL.createObjectURL(e.target.files[0]);
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            setVideoDuration(videoRef.current.duration);
-          }
-        };
-      }
-    }
-  };
-
-  const handleButtonClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
   const transcode = async () => {
-    if (!videoFile) {
-      alert("Please upload a video first.");
-      return;
-    }
+    if (!videoFile) return;
 
     setLoading(true);
     setProgress(0);
     const ffmpeg = ffmpegRef.current;
+
     try {
       await ffmpeg.writeFile(
         "input.mp4",
         await fetchFile(URL.createObjectURL(videoFile)),
       );
       await ffmpeg.exec(["-i", "input.mp4", "output.mp4"]);
-      const fileData = await ffmpeg.readFile("output.mp4");
-      const data = new Uint8Array(fileData as ArrayBuffer);
+      const data = await ffmpeg.readFile("output.mp4");
+
       if (videoRef.current) {
         videoRef.current.src = URL.createObjectURL(
           new Blob([data.buffer], { type: "video/mp4" }),
         );
       }
-      setLoading(false);
-      setProgress(100);
     } catch (error) {
       console.error("Error transcoding:", error);
+    } finally {
       setLoading(false);
     }
   };
 
+  // Handle auto-scrolling logs
   useEffect(() => {
-    if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }
+    const logContainer = logContainerRef.current;
+    if (!logContainer || !shouldAutoScrollRef.current) return;
+
+    logContainer.scrollTop = logContainer.scrollHeight;
   }, [logMessages]);
+
+  // Check if user is scrolling up
+  const handleScroll = () => {
+    const logContainer = logContainerRef.current;
+    if (!logContainer) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = logContainer;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    shouldAutoScrollRef.current = isNearBottom;
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -152,28 +131,20 @@ function App() {
             <>
               <div
                 {...getRootProps()}
-                className={`border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center ${isDragActive ? "bg-gray-200 border-blue-500" : "border-gray-300"}`}
+                className={`border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center ${
+                  isDragActive
+                    ? "bg-gray-200 border-blue-500"
+                    : "border-gray-300"
+                }`}
               >
-                <input
-                  {...getInputProps()}
-                  ref={fileInputRef}
-                  type="file"
-                  accept="video/*"
-                  onChange={handleVideoUpload}
-                  className="hidden"
-                />
+                <input {...getInputProps()} />
                 <FilePlus className="h-6 w-6 text-gray-500 mb-2" />
                 <p className="text-sm text-gray-500">
                   {isDragActive
                     ? "Drop video here..."
                     : "Drag 'n' drop a video here, or click to select a file"}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleButtonClick}
-                  className="mt-2"
-                >
+                <Button variant="outline" size="sm" className="mt-2">
                   <Upload className="h-4 w-4 mr-2" />
                   Upload a Video
                 </Button>
@@ -184,7 +155,7 @@ function App() {
                 controls
                 className="w-full aspect-video rounded-md mt-4"
               />
-              <br />
+
               <Button
                 disabled={loading || !videoFile}
                 onClick={transcode}
@@ -192,10 +163,13 @@ function App() {
               >
                 {loading ? "Transcoding..." : "Transcode video to mp4"}
               </Button>
-              {loading ? <Progress value={progress} className="mt-2" /> : null}
+
+              {loading && <Progress value={progress} className="mt-2" />}
+
               <div
                 ref={logContainerRef}
-                className="h-20 mt-2 rounded-md border border-input overflow-auto"
+                onScroll={handleScroll}
+                className="h-60 mt-2 rounded-md border border-input overflow-auto"
               >
                 {logMessages.map((message, index) => (
                   <p key={index} className="p-2 text-sm">

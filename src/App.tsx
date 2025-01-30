@@ -88,7 +88,7 @@ function App() {
 
       if (videoRef.current) {
         videoRef.current.src = URL.createObjectURL(
-          new Blob([data.buffer], { type: "video/mp4" }),
+          new Blob([data], { type: "video/mp4" }),
         );
       }
     } catch (error) {

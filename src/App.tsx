@@ -1,9 +1,15 @@
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { FilePlus, Upload } from "lucide-react";
+import { AlertTriangle, FilePlus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 
@@ -17,9 +23,11 @@ function App() {
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     const baseURL = "";
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("log", ({ message }) => {
@@ -49,8 +57,9 @@ function App() {
         ),
       });
       setLoaded(true);
-    } catch (error) {
-      console.error("Error loading ffmpeg:", error);
+    } catch (err: any) {
+      console.error("Error loading ffmpeg:", err);
+      setError("Failed to load converter. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -58,6 +67,7 @@ function App() {
 
   const handleFileSelect = (file: File) => {
     setVideoFile(file);
+    setError(null);
     if (videoRef.current) {
       videoRef.current.src = URL.createObjectURL(file);
     }
@@ -73,7 +83,7 @@ function App() {
 
   const transcode = async () => {
     if (!videoFile) return;
-
+    setError(null);
     setLoading(true);
     setProgress(0);
     const ffmpeg = ffmpegRef.current;
@@ -89,7 +99,7 @@ function App() {
         "-i",
         "input.mp4",
         "-vf",
-        `scale=ceil(iw/2)*2:ceil(ih/2)*2,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1`, // this is so ffmpeg won't crash on videos with non-even dimensions
+        `scale=ceil(iw/2)*2:ceil(ih/2)*2,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1`,
         "output.mp4",
       ]);
       const data = await ffmpeg.readFile("output.mp4");
@@ -99,8 +109,9 @@ function App() {
           new Blob([data], { type: "video/mp4" }),
         );
       }
-    } catch (error) {
-      console.error("Error transcoding:", error);
+    } catch (err: any) {
+      console.error("Error transcoding:", err);
+      setError("Failed to process video. Please try another video.");
     } finally {
       setLoading(false);
     }
@@ -125,66 +136,95 @@ function App() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <Card className="w-[500px] p-4">
+    <div className="dark:bg-gray-800 flex items-center justify-center min-h-screen bg-gray-100">
+      <Card className="w-[500px] p-4 dark:bg-gray-700 dark:text-white dark:border-gray-500">
         <CardHeader>
-          <CardTitle>FFmpeg Video Transcoder</CardTitle>
+          <CardTitle className="text-xl font-semibold">
+            Video Dark to Light Converter
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {!loaded ? (
-            <Button variant="outline" disabled={loading} onClick={load}>
-              {loading ? "Loading ffmpeg-core..." : "Load ffmpeg-core"}
+            <Button
+              variant="outline"
+              className="dark:text-black"
+              disabled={loading}
+              onClick={load}
+            >
+              {loading ? "Loading..." : "Initialize Converter"}
             </Button>
           ) : (
             <>
               <div
                 {...getRootProps()}
-                className={`border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center ${
+                className={`border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center dark:bg-gray-600 ${
                   isDragActive
-                    ? "bg-gray-200 border-blue-500"
+                    ? "bg-gray-200 border-blue-500 dark:bg-gray-500"
                     : "border-gray-300"
                 }`}
               >
                 <input {...getInputProps()} />
-                <FilePlus className="h-6 w-6 text-gray-500 mb-2" />
-                <p className="text-sm text-gray-500">
+                <FilePlus className="h-6 w-6 text-gray-500 dark:text-white mb-2" />
+                <p className="text-sm text-gray-500 dark:text-white text-center">
                   {isDragActive
                     ? "Drop video here..."
-                    : "Drag 'n' drop a video here, or click to select a file"}
+                    : "Drag and drop a video, or click to select one"}
                 </p>
-                <Button variant="outline" size="sm" className="mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 dark:text-black dark:border-gray-500"
+                >
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload a Video
+                  Select a Video
                 </Button>
               </div>
+
+              {error && (
+                <div className="flex items-center text-red-500 bg-red-100 dark:bg-red-800 dark:text-red-200 p-2 rounded-md">
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  {error}
+                </div>
+              )}
 
               <video
                 ref={videoRef}
                 controls
-                className="w-full aspect-video rounded-md mt-4"
+                className="w-full aspect-video rounded-md mt-4 dark:bg-gray-900"
               />
 
               <Button
                 disabled={loading || !videoFile}
                 onClick={transcode}
-                className="mt-2"
+                className="mt-2 dark:text-white dark:bg-blue-500 hover:dark:bg-blue-600"
               >
-                {loading ? "Transcoding..." : "Transcode video with filters"}
+                {loading ? "Processing..." : "Convert to Light Mode"}
               </Button>
 
-              {loading && <Progress value={progress} className="mt-2" />}
+              {loading && (
+                <Progress value={progress} className="mt-2 dark:bg-white" />
+              )}
 
-              <div
-                ref={logContainerRef}
-                onScroll={handleScroll}
-                className="h-60 mt-2 rounded-md border border-input overflow-auto"
-              >
-                {logMessages.map((message, index) => (
-                  <p key={index} className="p-2 text-sm">
-                    {message}
-                  </p>
-                ))}
-              </div>
+              <Accordion type="single" collapsible className="mt-2">
+                <AccordionItem value="log">
+                  <AccordionTrigger className="cursor-pointer dark:text-white">
+                    Show Details
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div
+                      ref={logContainerRef}
+                      onScroll={handleScroll}
+                      className={`mt-2 rounded-md overflow-auto h-60 dark:border-gray-500 dark:bg-gray-900 dark:text-gray-200`}
+                    >
+                      {logMessages.map((message, index) => (
+                        <p key={index} className="p-2 text-sm">
+                          {message}
+                        </p>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </>
           )}
         </CardContent>

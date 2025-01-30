@@ -83,7 +83,15 @@ function App() {
         "input.mp4",
         await fetchFile(URL.createObjectURL(videoFile)),
       );
-      await ffmpeg.exec(["-i", "input.mp4", "output.mp4"]);
+
+      // add scale and pad video filters
+      await ffmpeg.exec([
+        "-i",
+        "input.mp4",
+        "-vf",
+        `scale=ceil(iw/2)*2:ceil(ih/2)*2,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1`, // this is so ffmpeg won't crash on videos with non-even dimensions
+        "output.mp4",
+      ]);
       const data = await ffmpeg.readFile("output.mp4");
 
       if (videoRef.current) {
@@ -161,7 +169,7 @@ function App() {
                 onClick={transcode}
                 className="mt-2"
               >
-                {loading ? "Transcoding..." : "Transcode video to mp4"}
+                {loading ? "Transcoding..." : "Transcode video with filters"}
               </Button>
 
               {loading && <Progress value={progress} className="mt-2" />}

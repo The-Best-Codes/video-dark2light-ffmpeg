@@ -57,7 +57,10 @@ function App() {
 
     try {
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}ffmpeg-core.js`, "text/javascript"),
+        coreURL: await toBlobURL(
+          `${baseURL}/ffmpeg-core.js`,
+          "text/javascript",
+        ),
         wasmURL: await toBlobURL(
           `${baseURL}/ffmpeg-core.wasm`,
           "application/wasm",
@@ -67,6 +70,11 @@ function App() {
           "text/javascript",
         ),
       });
+      /*await ffmpeg.load({
+        coreURL: `${baseURL}/ffmpeg-core.js`,
+        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+        workerURL: `${baseURL}/ffmpeg-core.worker.js`,
+      });*/
       setLoaded(true);
     } catch (err: any) {
       console.error("Error loading ffmpeg:", err);

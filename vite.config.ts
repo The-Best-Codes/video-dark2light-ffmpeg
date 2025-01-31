@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
+//import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 
 // https://vitejs.dev/config/
@@ -10,9 +11,17 @@ export default defineConfig({
         plugins: [["babel-plugin-react-compiler", { target: "19" }]],
       },
     }),
+    //visualizer({
+    //  filename: "dist/stats.html",
+    //}),
   ],
   optimizeDeps: {
-    exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+    exclude: [
+      "@ffmpeg/ffmpeg",
+      "@ffmpeg/util",
+      "@ffmpeg/core-mt",
+      "@ffmpeg/core",
+    ],
   },
   resolve: {
     alias: {
@@ -24,5 +33,8 @@ export default defineConfig({
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
+  },
+  build: {
+    assetsDir: "",
   },
 });

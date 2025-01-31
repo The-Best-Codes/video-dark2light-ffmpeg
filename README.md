@@ -71,3 +71,79 @@ Here's a breakdown of how the conversion process works:
     - A video player shows the original and converted videos.
 
 This setup allows users to convert video from dark to light mode with ease.
+
+## Annoying Gotchas
+
+There's a few gotchas that you might encounter when you setup ffmpeg in vite, especially deploying to Vercel.
+
+### Cross-Origin Policies (COEP/COOP)
+
+When you load the `ffmpeg` library from a URL like `unpkg.com`, you have to allow cross-origin requests.
+This is because the browser blocks workers from external domains due to security protocols.
+
+To fix this, you can use the `Cross-Origin-Embedder-Policy` header to allow cross-origin requests for the worker.
+
+In the Vite config:
+
+```js
+server: {
+  headers: {
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+  },
+},
+```
+
+And in the Vercel config:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+      ]
+    }
+  ]
+}
+```
+
+You should also load the files as a blob URL so that the domains match, which is already done in most of the FFMPEG WASM examples.
+
+### Vite tries to optimize the FFMPEG libraries
+
+Vite will try to optimize the ffmpeg libraries. This breaks them, so you need to disable this optimization.
+
+In the Vite config:
+
+```js
+optimizeDeps: {
+  exclude: [
+    "@ffmpeg/ffmpeg",
+    "@ffmpeg/util",
+    "@ffmpeg/core-mt",
+    "@ffmpeg/core",
+  ],
+},
+```
+
+### Vercel's Static Asset Serving
+
+Vercel optimizes load times by serving static assets with caching. While this is generally good, it doesn't always handle worker files dynamically as expected, so it might not add the needed headers.
+The runtime-generated worker file is served without our `Cross-Origin-Embedder-Policy` header because it's in the `assets` folder, so we have to change the `assets` folder location in the Vite config.
+
+You can do so like this:
+
+```js
+build: {
+  assetsDir: "",
+},
+```
+
+Setting the `assetsDir` to `""` will put the worker file in the root of the dist folder, so that they are treated just like other routes and have the correct headers.
+
+---
+
+[BestCodes](https://bestcodes.dev)

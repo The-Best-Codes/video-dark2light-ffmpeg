@@ -41,18 +41,26 @@ function App() {
     setError(null);
     const baseURL = ""; // empty, since we downloaded the files locally into the public folder
     const ffmpeg = ffmpegRef.current;
+    // Listen to progress event instead of log.
+    // progress is experimental, so be careful with this
+    // @ts-ignore
+    ffmpeg.on("progress", ({ progress, time }) => {
+      // messageRef.current.innerHTML = `${progress * 100} % (transcoded time: ${time / 1000000} s)`;
+      setProgress(Math.min(100, progress * 100)); // Using direct percentage for progress
+    });
+
     ffmpeg.on("log", ({ message }) => {
       setLogMessages((prev) => [...prev, message]);
 
-      // Parse progress from FFmpeg output
-      const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
-      if (timeMatch && videoRef.current?.duration) {
-        const [, hours, minutes, seconds] = timeMatch;
-        const currentTime =
-          parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-        const progress = (currentTime / videoRef.current.duration) * 100;
-        setProgress(Math.min(100, progress));
-      }
+      // Parse progress from FFmpeg output - REMOVED as we're using progress event now
+      // const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+      // if (timeMatch && videoRef.current?.duration) {
+      //   const [, hours, minutes, seconds] = timeMatch;
+      //   const currentTime =
+      //     parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+      //   const progress = (currentTime / videoRef.current.duration) * 100;
+      //   setProgress(Math.min(100, progress));
+      // }
     });
 
     try {

@@ -39,7 +39,7 @@ function App() {
   const load = async () => {
     setLoading(true);
     setError(null);
-    const baseURL = "";
+    const baseURL = ""; // empty, since we downloaded the files locally into the public folder
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on("log", ({ message }) => {
       setLogMessages((prev) => [...prev, message]);
@@ -109,7 +109,7 @@ function App() {
         await fetchFile(URL.createObjectURL(videoFile)),
       );
 
-      // add scale and pad video filters
+      // add scale and pad video filters to prevent invalid video dimensions errors
       await ffmpeg.exec([
         "-i",
         "input.mp4",

@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
@@ -35,32 +36,23 @@ function App() {
   const [convertedVideoUrl, setConvertedVideoUrl] = useState<string | null>(
     null,
   );
+  const [fastMode, setFastMode] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     const baseURL = ""; // empty, since we downloaded the files locally into the public folder
     const ffmpeg = ffmpegRef.current;
+
     // Listen to progress event instead of log.
-    // progress is experimental, so be careful with this
+    // progress event is experimental, be careful when using it
     // @ts-ignore
     ffmpeg.on("progress", ({ progress, time }) => {
-      // messageRef.current.innerHTML = `${progress * 100} % (transcoded time: ${time / 1000000} s)`;
       setProgress(Math.min(100, progress * 100)); // Using direct percentage for progress
     });
 
     ffmpeg.on("log", ({ message }) => {
       setLogMessages((prev) => [...prev, message]);
-
-      // Parse progress from FFmpeg output - REMOVED as we're using progress event now
-      // const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
-      // if (timeMatch && videoRef.current?.duration) {
-      //   const [, hours, minutes, seconds] = timeMatch;
-      //   const currentTime =
-      //     parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-      //   const progress = (currentTime / videoRef.current.duration) * 100;
-      //   setProgress(Math.min(100, progress));
-      // }
     });
 
     try {
@@ -78,11 +70,6 @@ function App() {
           "text/javascript",
         ),
       });
-      /*await ffmpeg.load({
-        coreURL: `${baseURL}/ffmpeg-core.js`,
-        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-        workerURL: `${baseURL}/ffmpeg-core.worker.js`,
-      });*/
       setLoaded(true);
     } catch (err: any) {
       console.error("Error loading ffmpeg:", err);
@@ -110,6 +97,7 @@ function App() {
       "video/*": [".mp4", ".mov", ".avi"],
     },
     multiple: false,
+    disabled: loading, // Disable dropzone while loading
   });
 
   const transcode = async () => {
@@ -125,14 +113,41 @@ function App() {
         await fetchFile(URL.createObjectURL(videoFile)),
       );
 
-      // add scale and pad video filters to prevent invalid video dimensions errors
+      // add padding to make sure the video dimensions are divisible by 2
+      let filters =
+        "scale=ceil(iw/2)*2:ceil(ih/2)*2,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1";
+
+      if (fastMode) {
+        const maxResolution = 1920 * 1080;
+        const currentResolution =
+          (videoRef.current?.videoWidth as number) *
+            (videoRef.current?.videoHeight as number) || 0;
+        let targetWidth = videoRef.current?.videoWidth;
+        let targetHeight = videoRef.current?.videoHeight;
+        if (currentResolution > maxResolution) {
+          const aspectRatio =
+            (videoRef.current?.videoWidth as number) /
+              (videoRef.current?.videoHeight as number) || 1;
+
+          targetWidth = Math.min(1920, videoRef.current?.videoWidth || 1);
+          targetHeight = targetWidth / aspectRatio;
+          if (targetHeight > 1080) {
+            targetHeight = 1080;
+            targetWidth = targetHeight * aspectRatio;
+          }
+        }
+        filters = `scale=ceil(${targetWidth}/2)*2:ceil(${targetHeight}/2)*2,pad=ceil(${targetWidth}/2)*2:ceil(${targetHeight}/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1`;
+      }
+
       await ffmpeg.exec([
         "-i",
         "input.mp4",
         "-vf",
-        `scale=ceil(iw/2)*2:ceil(ih/2)*2,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2,negate,hue=h=180,eq=contrast=1.2:saturation=1.1`,
+        filters,
+        ...(fastMode ? ["-preset", "ultrafast"] : []),
         "output.mp4",
       ]);
+
       const data = await ffmpeg.readFile("output.mp4");
 
       const blob = new Blob([data], { type: "video/mp4" });
@@ -227,6 +242,7 @@ function App() {
                   variant="outline"
                   size="sm"
                   className="mt-2 dark:text-black dark:border-gray-500"
+                  disabled={loading} // Disable the button while loading
                 >
                   <Upload className="h-4 w-4" />
                   Select a Video
@@ -245,6 +261,20 @@ function App() {
                 controls
                 className="w-full aspect-video rounded-md mt-4 dark:bg-gray-900"
               />
+              <div className="flex items-center mt-2 space-x-2">
+                <label
+                  htmlFor="fast-mode-switch"
+                  className="text-sm font-medium dark:text-white"
+                >
+                  Fast Mode
+                </label>
+                <Switch
+                  id="fast-mode-switch"
+                  checked={fastMode}
+                  onCheckedChange={(checked) => setFastMode(checked)}
+                  disabled={loading}
+                />
+              </div>
 
               <div className="flex flex-col md:flex-row md:items-center gap-2 mt-2">
                 <Button
@@ -282,7 +312,7 @@ function App() {
               <Accordion type="single" collapsible className="mt-2">
                 <AccordionItem value="log">
                   <AccordionTrigger className="cursor-pointer dark:text-white">
-                    Show Logs
+                    Show FFMPEG Logs
                   </AccordionTrigger>
                   <AccordionContent>
                     <div
